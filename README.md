@@ -2,7 +2,7 @@
 
 A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC/XMP, GPS location, extended attributes (Finder comments/tags), and filesystem timestamps.
 
-[**Download MetaWipe-1.0.0.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
+[**Download MetaWipe-1.1.0.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
 
 ## Features
 
@@ -11,12 +11,18 @@ A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC
 - View and remove individual extended attributes
 - Edit filesystem creation/modification timestamps
 - One-click **Erase All Metadata**, with separate toggles for embedded metadata, extended attributes, and timestamps, and an option to keep a backup copy
+- **Check for Updates…** menu command (also checks silently on launch) that compares against the latest GitHub release
+- Finder integration: right-click any file → **Services** → **Edit Meta Tags** (opens it in MetaWipe) or **Strip Meta Tags** (silently erases embedded metadata + extended attributes, keeping a backup)
 
 ## Installing
 
 Download the DMG from the [latest release](https://github.com/ScottPhillips/MetaWipe/releases/latest), open it, and drag MetaWipe to Applications.
 
 This build is ad-hoc signed (no paid Apple Developer ID), so macOS Gatekeeper will block the first launch. To open it: right-click (or Control-click) MetaWipe.app in Applications and choose **Open**, then confirm in the dialog that appears. You only need to do this once.
+
+### Enabling the Finder services
+
+macOS ships new Services disabled by default, so after installing (or updating), open **System Settings → Keyboard → Keyboard Shortcuts… → Services → Files and Folders**, and check the boxes for **Edit Meta Tags** and **Strip Meta Tags**. This is a one-time step; they'll then show up under right-click → Services for any file.
 
 ## Building from source
 

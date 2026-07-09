@@ -3,8 +3,18 @@ import AppKit
 
 private let githubURL = URL(string: "https://github.com/ScottPhillips/MetaWipe")!
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let finderServiceProvider = FinderServiceProvider()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.servicesProvider = finderServiceProvider
+        NSUpdateDynamicServices()
+    }
+}
+
 @main
 struct MetaWipeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
@@ -31,6 +41,9 @@ struct MetaWipeApp: App {
                             ]
                         )
                     ])
+                }
+                Button("Check for Updates…") {
+                    Task { await appState.checkForUpdates(silent: false) }
                 }
             }
         }

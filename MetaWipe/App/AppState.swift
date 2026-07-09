@@ -1,14 +1,44 @@
 import Foundation
 
+struct UpdateAlert: Identifiable {
+    enum Kind {
+        case updateAvailable(version: String, url: URL)
+        case upToDate
+        case failed(String)
+    }
+    let id = UUID()
+    let kind: Kind
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var files: [MetadataFile] = []
     @Published var selectedFileID: MetadataFile.ID?
     @Published var isBusy = false
     @Published var errorMessage: String?
+    @Published var updateAlert: UpdateAlert?
 
     var selectedFile: MetadataFile? {
         files.first { $0.id == selectedFileID }
+    }
+
+    /// Checks the GitHub releases API for a newer tagged version than this build.
+    /// `silent: true` (used on launch) only surfaces UI when an update is actually found;
+    /// `silent: false` (the manual "Check for Updates…" command) always reports a result.
+    func checkForUpdates(silent: Bool) async {
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        do {
+            let release = try await UpdateChecker.fetchLatestRelease()
+            if UpdateChecker.isNewer(release.version, than: currentVersion) {
+                updateAlert = UpdateAlert(kind: .updateAvailable(version: release.version, url: release.htmlURL))
+            } else if !silent {
+                updateAlert = UpdateAlert(kind: .upToDate)
+            }
+        } catch {
+            if !silent {
+                updateAlert = UpdateAlert(kind: .failed(error.localizedDescription))
+            }
+        }
     }
 
     func addFiles(_ urls: [URL]) {

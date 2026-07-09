@@ -45,8 +45,12 @@ struct ContentView: View {
                 }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .metaWipeAddFiles)) { _ in
-            presentOpenPanel()
+        .onReceive(NotificationCenter.default.publisher(for: .metaWipeAddFiles)) { notification in
+            if let urls = notification.userInfo?["urls"] as? [URL] {
+                appState.addFiles(urls)
+            } else {
+                presentOpenPanel()
+            }
         }
         .alert("Error", isPresented: Binding(
             get: { appState.errorMessage != nil },
@@ -55,6 +59,35 @@ struct ContentView: View {
             Button("OK", role: .cancel) { appState.errorMessage = nil }
         } message: {
             Text(appState.errorMessage ?? "")
+        }
+        .alert(
+            "Software Update",
+            isPresented: Binding(
+                get: { appState.updateAlert != nil },
+                set: { if !$0 { appState.updateAlert = nil } }
+            ),
+            presenting: appState.updateAlert
+        ) { alert in
+            switch alert.kind {
+            case .updateAvailable(_, let url):
+                Button("View Release") { NSWorkspace.shared.open(url) }
+                Button("Later", role: .cancel) {}
+            case .upToDate, .failed:
+                Button("OK", role: .cancel) {}
+            }
+        } message: { alert in
+            switch alert.kind {
+            case .updateAvailable(let version, _):
+                let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+                Text("MetaWipe \(version) is available. You have \(current).")
+            case .upToDate:
+                Text("You're using the latest version of MetaWipe.")
+            case .failed(let message):
+                Text(message)
+            }
+        }
+        .task {
+            await appState.checkForUpdates(silent: true)
         }
     }
 
