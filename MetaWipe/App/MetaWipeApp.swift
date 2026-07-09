@@ -1,4 +1,7 @@
 import SwiftUI
+import AppKit
+
+private let githubURL = URL(string: "https://github.com/ScottPhillips/MetaWipe")!
 
 @main
 struct MetaWipeApp: App {
@@ -16,6 +19,19 @@ struct MetaWipeApp: App {
                     NotificationCenter.default.post(name: .metaWipeAddFiles, object: nil)
                 }
                 .keyboardShortcut("o", modifiers: .command)
+            }
+            CommandGroup(replacing: .appInfo) {
+                Button("About MetaWipe") {
+                    NSApplication.shared.orderFrontStandardAboutPanel(options: [
+                        .credits: NSAttributedString(
+                            string: githubURL.absoluteString,
+                            attributes: [
+                                .link: githubURL,
+                                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+                            ]
+                        )
+                    ])
+                }
             }
         }
     }
