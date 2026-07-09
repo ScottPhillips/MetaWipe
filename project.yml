@@ -15,6 +15,11 @@ targets:
     platform: macOS
     sources:
       - path: MetaWipe
+        excludes:
+          - "Resources/ExifTool/**"
+      - path: MetaWipe/Resources/ExifTool
+        type: folder
+        buildPhase: resources
     info:
       path: MetaWipe/Resources/Info.plist
       properties:

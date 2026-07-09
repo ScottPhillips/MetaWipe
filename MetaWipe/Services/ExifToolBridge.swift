@@ -23,17 +23,57 @@ enum ExifToolError: LocalizedError {
 actor ExifToolBridge {
     static let shared = ExifToolBridge()
 
-    private let binaryPath: String? = {
-        let candidates = ["/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool", "/usr/bin/exiftool"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    private struct Invocation {
+        let executable: URL
+        let baseArguments: [String]
+        let extraEnvironment: [String: String]
+    }
+
+    /// Prefers the copy of exiftool + its Perl modules bundled in Contents/Resources so the
+    /// app works standalone without Homebrew. Falls back to a Homebrew install for local
+    /// development (e.g. running via `swift build` outside the .app bundle).
+    private let invocation: Invocation? = {
+        ExifToolBridge.bundledInvocation() ?? ExifToolBridge.systemInvocation()
     }()
+
+    private static func bundledInvocation() -> Invocation? {
+        guard let resourceURL = Bundle.main.resourceURL else { return nil }
+        let toolDir = resourceURL.appendingPathComponent("ExifTool")
+        let scriptURL = toolDir.appendingPathComponent("exiftool")
+        let libURL = toolDir.appendingPathComponent("lib")
+        guard FileManager.default.isExecutableFile(atPath: scriptURL.path) else { return nil }
+
+        // exiftool ships pure-Perl modules directly under "lib" and architecture-specific
+        // compiled ones under "lib/<archname>"; both need to be on Perl's search path.
+        let archLibURL = libURL.appendingPathComponent("darwin-thread-multi-2level")
+        let perl5lib = [libURL.path, archLibURL.path].joined(separator: ":")
+        return Invocation(
+            executable: URL(fileURLWithPath: "/usr/bin/perl"),
+            baseArguments: [scriptURL.path],
+            extraEnvironment: ["PERL5LIB": perl5lib]
+        )
+    }
+
+    private static func systemInvocation() -> Invocation? {
+        let candidates = ["/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool", "/usr/bin/exiftool"]
+        guard let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            return nil
+        }
+        return Invocation(executable: URL(fileURLWithPath: path), baseArguments: [], extraEnvironment: [:])
+    }
 
     @discardableResult
     private func run(_ arguments: [String]) throws -> (stdout: Data, stderr: String, status: Int32) {
-        guard let binaryPath else { throw ExifToolError.binaryNotFound }
+        guard let invocation else { throw ExifToolError.binaryNotFound }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: binaryPath)
-        process.arguments = arguments
+        process.executableURL = invocation.executable
+        process.arguments = invocation.baseArguments + arguments
+
+        var environment = ProcessInfo.processInfo.environment
+        for (key, value) in invocation.extraEnvironment {
+            environment[key] = value
+        }
+        process.environment = environment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
