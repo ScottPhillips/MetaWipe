@@ -4,6 +4,8 @@ A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC
 
 [**Download MetaWipe-1.1.0.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
 
+![MetaWipe main window showing metadata tags for a file](screenshots/main-view.png)
+
 ## Features
 
 - View and filter all metadata tags on any file, grouped by source (EXIF, IPTC, XMP, GPS, etc.)
@@ -13,6 +15,8 @@ A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC
 - One-click **Erase All Metadata**, with separate toggles for embedded metadata, extended attributes, and timestamps, and an option to keep a backup copy
 - **Check for Updates…** menu command (also checks silently on launch) that compares against the latest GitHub release
 - Finder integration: right-click any file → **Services** → **Edit Meta Tags** (opens it in MetaWipe) or **Strip Meta Tags** (silently erases embedded metadata + extended attributes, keeping a backup)
+
+<img src="screenshots/erase-dialog.png" alt="Erase All Metadata confirmation dialog" width="460">
 
 ## Installing
 
