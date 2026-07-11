@@ -2,7 +2,7 @@
 
 A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC/XMP, GPS location, extended attributes (Finder comments/tags), and filesystem timestamps.
 
-[**Download MetaWipe-1.1.0.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
+[**Download MetaWipe-1.2.0.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
 
 ![MetaWipe main window showing metadata tags for a file](screenshots/main-view.png)
 
@@ -22,7 +22,7 @@ A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC
 
 Download the DMG from the [latest release](https://github.com/ScottPhillips/MetaWipe/releases/latest), open it, and drag MetaWipe to Applications.
 
-This build is ad-hoc signed (no paid Apple Developer ID), so macOS Gatekeeper will block the first launch. To open it: right-click (or Control-click) MetaWipe.app in Applications and choose **Open**, then confirm in the dialog that appears. You only need to do this once.
+This build is signed with a Developer ID and notarized by Apple, so it opens normally — no Gatekeeper warning or right-click workaround needed.
 
 ### Enabling the Finder services
 
