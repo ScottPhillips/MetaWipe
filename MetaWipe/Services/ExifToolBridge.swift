@@ -91,11 +91,13 @@ actor ExifToolBridge {
         return (stdoutData, stderrString, process.terminationStatus)
     }
 
-    /// Result of a metadata read: the tags themselves, plus whether exiftool can write
-    /// this file's format at all (e.g. it can read ID3 tags from MP3 but never write them —
-    /// see `writableFileExtensions`).
+    /// Result of a metadata read: the tags themselves, the detected file type (used to route
+    /// writes — see AppState.saveTagEdits), and whether *something* can write this format:
+    /// either exiftool itself, or — for MP3 specifically — MetaWipe's own `ID3Writer`, which
+    /// covers the common ID3v2 text frames exiftool can only read (see `writableFileExtensions`).
     struct ReadResult {
         let tags: [MetadataTag]
+        let fileTypeExtension: String?
         let isFormatWritable: Bool
     }
 
@@ -134,8 +136,10 @@ actor ExifToolBridge {
         }
 
         let writableExtensions = try writableFileExtensions()
-        let isFormatWritable = fileTypeExtension.map { writableExtensions.contains($0.uppercased()) } ?? false
-        return ReadResult(tags: tags, isFormatWritable: isFormatWritable)
+        let extensionUppercased = fileTypeExtension?.uppercased()
+        // MP3 isn't in exiftool's own writable list, but ID3Writer covers it separately.
+        let isFormatWritable = extensionUppercased.map { writableExtensions.contains($0) || $0 == "MP3" } ?? false
+        return ReadResult(tags: tags, fileTypeExtension: fileTypeExtension, isFormatWritable: isFormatWritable)
     }
 
     /// The file extensions exiftool is able to write, per its own "-listwf". Notably excludes

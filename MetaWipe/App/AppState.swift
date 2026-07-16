@@ -94,6 +94,7 @@ final class AppState: ObservableObject {
             let dates = try FileTimestampManager.dates(url: file.url)
             file.tags = read.tags
             file.isFormatWritable = read.isFormatWritable
+            file.fileTypeExtension = read.fileTypeExtension
             file.xattrs = xattrs
             file.creationDate = dates.creation
             file.modificationDate = dates.modification
@@ -108,7 +109,13 @@ final class AppState: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         do {
-            try await ExifToolBridge.shared.writeTags(url: file.url, tags: modified)
+            // exiftool can't write MP3 at all (see ExifToolBridge.readTags), so MP3 tag edits
+            // go through MetaWipe's own narrow ID3v2 writer instead.
+            if file.fileTypeExtension?.uppercased() == "MP3" {
+                try ID3Writer.write(url: file.url, tags: modified)
+            } else {
+                try await ExifToolBridge.shared.writeTags(url: file.url, tags: modified)
+            }
             file.lastAction = "Saved \(modified.count) tag change(s)"
             await load(file)
         } catch {

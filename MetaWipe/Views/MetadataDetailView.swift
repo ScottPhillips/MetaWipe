@@ -62,6 +62,9 @@ struct MetadataDetailView: View {
                     if !file.isFormatWritable {
                         Text("exiftool can read but not write \(file.url.pathExtension.uppercased()) files, so these values are read-only.")
                             .foregroundStyle(.secondary)
+                    } else if file.fileTypeExtension?.uppercased() == "MP3" {
+                        Text("MP3 tag writes go through MetaWipe's own ID3 writer, which covers common fields (title, artist, album, comment, etc.) — some less common tags remain read-only.")
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Section("Extended Attributes (\(file.xattrs.count))") {
