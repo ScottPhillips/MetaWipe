@@ -29,6 +29,8 @@ actor ExifToolBridge {
         let extraEnvironment: [String: String]
     }
 
+    private var cachedWritableExtensions: Set<String>?
+
     /// Prefers the copy of exiftool + its Perl modules bundled in Contents/Resources so the
     /// app works standalone without Homebrew. Falls back to a Homebrew install for local
     /// development (e.g. running via `swift build` outside the .app bundle).
@@ -89,8 +91,21 @@ actor ExifToolBridge {
         return (stdoutData, stderrString, process.terminationStatus)
     }
 
-    func readTags(url: URL) throws -> [MetadataTag] {
-        let result = try run(["-json", "-G", "-a", "-u", "-struct", url.path])
+    /// Result of a metadata read: the tags themselves, plus whether exiftool can write
+    /// this file's format at all (e.g. it can read ID3 tags from MP3 but never write them —
+    /// see `writableFileExtensions`).
+    struct ReadResult {
+        let tags: [MetadataTag]
+        let isFormatWritable: Bool
+    }
+
+    func readTags(url: URL) throws -> ReadResult {
+        // "-G1" (family 1) reports the specific group each tag actually belongs to
+        // (e.g. "IFD0", "ExifIFD", "XMP-dc", "ID3v2_3") rather than the family-0 summary
+        // name ("EXIF", "XMP", "ID3"). Family-1 names double as the group specifier
+        // exiftool expects when writing a tag back, so round-tripping a value through
+        // "-\(group):\(name)=" only works reliably when we read groups this way.
+        let result = try run(["-json", "-G1", "-a", "-u", "-struct", url.path])
         guard !result.stdout.isEmpty else {
             throw ExifToolError.processFailed(result.stderr.isEmpty ? "exiftool failed to read \(url.lastPathComponent)" : result.stderr)
         }
@@ -102,6 +117,7 @@ actor ExifToolBridge {
         }
 
         var tags: [MetadataTag] = []
+        var fileTypeExtension: String?
         for (key, rawValue) in object {
             guard key != "SourceFile" else { continue }
             let parts = key.split(separator: ":", maxSplits: 1)
@@ -109,10 +125,35 @@ actor ExifToolBridge {
             let name = parts.count > 1 ? String(parts[1]) : key
             let value = Self.stringify(rawValue)
             tags.append(MetadataTag(id: key, group: group, name: name, value: value, originalValue: value))
+            if name == "FileTypeExtension" {
+                fileTypeExtension = value
+            }
         }
-        return tags.sorted {
+        tags.sort {
             $0.group == $1.group ? $0.name < $1.name : $0.group < $1.group
         }
+
+        let writableExtensions = try writableFileExtensions()
+        let isFormatWritable = fileTypeExtension.map { writableExtensions.contains($0.uppercased()) } ?? false
+        return ReadResult(tags: tags, isFormatWritable: isFormatWritable)
+    }
+
+    /// The file extensions exiftool is able to write, per its own "-listwf". Notably excludes
+    /// formats it can only read — MP3/ID3 chief among them, which is why editing an MP3's tags
+    /// always failed with "doesn't exist or isn't writable" regardless of which tag was touched.
+    private func writableFileExtensions() throws -> Set<String> {
+        if let cachedWritableExtensions { return cachedWritableExtensions }
+        let result = try run(["-listwf"])
+        guard let output = String(data: result.stdout, encoding: .utf8) else {
+            throw ExifToolError.invalidOutput
+        }
+        let extensions = Set(
+            output.split(whereSeparator: { $0.isWhitespace })
+                .map { $0.uppercased() }
+                .filter { $0 != "WRITABLE" && $0 != "FILE" && $0 != "EXTENSIONS:" }
+        )
+        cachedWritableExtensions = extensions
+        return extensions
     }
 
     private static func stringify(_ value: Any) -> String {

@@ -16,5 +16,8 @@ struct MetadataTag: Identifiable, Equatable {
         !Self.readOnlyGroups.contains(group)
     }
 
-    private static let readOnlyGroups: Set<String> = ["File", "Composite", "ExifTool"]
+    /// With tags read via "-G1" (see ExifToolBridge.readTags), filesystem-derived tags split
+    /// across two family-1 groups depending on the tag ("System" for FileName/FileSize/dates,
+    /// "File" for FileType/MIMEType/etc.) — both are exiftool-computed, not stored in the file.
+    private static let readOnlyGroups: Set<String> = ["File", "System", "Composite", "ExifTool"]
 }

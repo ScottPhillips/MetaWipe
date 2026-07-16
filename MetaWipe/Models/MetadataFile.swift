@@ -12,6 +12,9 @@ final class MetadataFile: ObservableObject, Identifiable, Hashable {
     @Published var isLoading = false
     @Published var loadError: String?
     @Published var lastAction: String?
+    /// Whether exiftool can write this file's format at all (e.g. false for MP3, which it
+    /// can only read ID3 tags from). Gates whether tag values are shown as editable.
+    @Published var isFormatWritable = true
 
     init(url: URL) {
         self.url = url

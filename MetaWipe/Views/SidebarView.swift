@@ -6,12 +6,15 @@ struct SidebarView: View {
     var body: some View {
         List(selection: Binding(
             get: { appState.selectedFileID },
-            set: { appState.selectedFileID = $0 }
+            set: { appState.requestSelection($0) }
         )) {
             ForEach(appState.files) { file in
                 FileRow(file: file)
                     .tag(file.id)
                     .contextMenu {
+                        Button("Reload Tags") {
+                            Task { await appState.load(file) }
+                        }
                         Button("Remove", role: .destructive) {
                             appState.removeFile(file)
                         }
@@ -25,6 +28,16 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Files")
+        .alert("Unsaved Changes", isPresented: $appState.showUnsavedChangesPrompt) {
+            Button("Discard Changes", role: .destructive) {
+                appState.confirmDiscardAndSwitch()
+            }
+            Button("Cancel", role: .cancel) {
+                appState.cancelPendingSwitch()
+            }
+        } message: {
+            Text("\(appState.selectedFile?.name ?? "This file") has unsaved tag edits. Switching files will discard them.")
+        }
     }
 }
 
