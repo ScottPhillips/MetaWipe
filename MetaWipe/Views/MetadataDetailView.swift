@@ -50,11 +50,21 @@ struct MetadataDetailView: View {
         } else {
             let visibleIDs = filteredTagIDs
             List {
-                Section("Metadata Tags (\(visibleIDs.count))") {
+                Section {
                     ForEach($file.tags) { $tag in
                         if visibleIDs.contains(tag.id) {
-                            TagRow(tag: $tag)
+                            TagRow(tag: $tag, isFormatWritable: file.isFormatWritable)
                         }
+                    }
+                } header: {
+                    Text("Metadata Tags (\(visibleIDs.count))")
+                } footer: {
+                    if !file.isFormatWritable {
+                        Text("exiftool can read but not write \(file.url.pathExtension.uppercased()) files, so these values are read-only.")
+                            .foregroundStyle(.secondary)
+                    } else if file.fileTypeExtension?.uppercased() == "MP3" {
+                        Text("MP3 tag writes go through MetaWipe's own ID3 writer, which covers common fields (title, artist, album, comment, etc.) — some less common tags remain read-only.")
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Section("Extended Attributes (\(file.xattrs.count))") {
@@ -106,6 +116,8 @@ struct MetadataDetailView: View {
                 Button("Save Changes") {
                     Task { await appState.saveTagEdits(file) }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
                 .disabled(appState.isBusy)
             }
             Button(role: .destructive) {
@@ -144,6 +156,7 @@ struct MetadataDetailView: View {
 
 private struct TagRow: View {
     @Binding var tag: MetadataTag
+    let isFormatWritable: Bool
 
     var body: some View {
         HStack {
@@ -152,7 +165,7 @@ private struct TagRow: View {
                 Text(tag.group).font(.caption2).foregroundStyle(.secondary)
             }
             .frame(width: 180, alignment: .leading)
-            if tag.isEditable {
+            if tag.isEditable && isFormatWritable {
                 TextField("Value", text: $tag.value)
                     .textFieldStyle(.roundedBorder)
             } else {

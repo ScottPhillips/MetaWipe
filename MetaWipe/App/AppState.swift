@@ -17,9 +17,37 @@ final class AppState: ObservableObject {
     @Published var isBusy = false
     @Published var errorMessage: String?
     @Published var updateAlert: UpdateAlert?
+    /// Sidebar selection the user asked to switch to while the current file had unsaved tag
+    /// edits; non-nil while `showUnsavedChangesPrompt` is up, waiting on the user's choice.
+    @Published var pendingSelectionID: MetadataFile.ID?
+    @Published var showUnsavedChangesPrompt = false
 
     var selectedFile: MetadataFile? {
         files.first { $0.id == selectedFileID }
+    }
+
+    /// Sidebar selection changes route through here instead of setting `selectedFileID`
+    /// directly, so switching away from a file with unsaved tag edits prompts for
+    /// confirmation instead of silently discarding them.
+    func requestSelection(_ id: MetadataFile.ID?) {
+        guard id != selectedFileID else { return }
+        if let current = selectedFile, current.tags.contains(where: { $0.isModified }) {
+            pendingSelectionID = id
+            showUnsavedChangesPrompt = true
+        } else {
+            selectedFileID = id
+        }
+    }
+
+    func confirmDiscardAndSwitch() {
+        selectedFileID = pendingSelectionID
+        pendingSelectionID = nil
+        showUnsavedChangesPrompt = false
+    }
+
+    func cancelPendingSwitch() {
+        pendingSelectionID = nil
+        showUnsavedChangesPrompt = false
     }
 
     /// Checks the GitHub releases API for a newer tagged version than this build.
@@ -61,10 +89,12 @@ final class AppState: ObservableObject {
         file.loadError = nil
         defer { file.isLoading = false }
         do {
-            let tags = try await ExifToolBridge.shared.readTags(url: file.url)
+            let read = try await ExifToolBridge.shared.readTags(url: file.url)
             let xattrs = try XattrManager.list(url: file.url)
             let dates = try FileTimestampManager.dates(url: file.url)
-            file.tags = tags
+            file.tags = read.tags
+            file.isFormatWritable = read.isFormatWritable
+            file.fileTypeExtension = read.fileTypeExtension
             file.xattrs = xattrs
             file.creationDate = dates.creation
             file.modificationDate = dates.modification
@@ -79,7 +109,13 @@ final class AppState: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         do {
-            try await ExifToolBridge.shared.writeTags(url: file.url, tags: modified)
+            // exiftool can't write MP3 at all (see ExifToolBridge.readTags), so MP3 tag edits
+            // go through MetaWipe's own narrow ID3v2 writer instead.
+            if file.fileTypeExtension?.uppercased() == "MP3" {
+                try ID3Writer.write(url: file.url, tags: modified)
+            } else {
+                try await ExifToolBridge.shared.writeTags(url: file.url, tags: modified)
+            }
             file.lastAction = "Saved \(modified.count) tag change(s)"
             await load(file)
         } catch {
