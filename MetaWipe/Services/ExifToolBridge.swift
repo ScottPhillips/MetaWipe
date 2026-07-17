@@ -135,6 +135,21 @@ actor ExifToolBridge {
             $0.group == $1.group ? $0.name < $1.name : $0.group < $1.group
         }
 
+        // TXXX/WXXX (user-defined) frames aren't in ID3TextFrameNames' static map — exiftool
+        // names them dynamically from each frame's own description — so ID3Writer re-parses the
+        // raw tag here to flag which of those this file has exactly one of (and are therefore
+        // safe to edit; see ID3Writer.editableUserDefinedFrameNames and MetadataTag.isEditable).
+        if fileTypeExtension?.uppercased() == "MP3", let rawData = try? Data(contentsOf: url) {
+            let editableNames = ID3Writer.editableUserDefinedFrameNames(data: rawData)
+            for index in tags.indices {
+                let tag = tags[index]
+                guard tag.group == "ID3v2_3" || tag.group == "ID3v2_4" else { continue }
+                if editableNames.contains(tag.name) {
+                    tags[index].isUserDefinedID3FrameEditable = true
+                }
+            }
+        }
+
         let writableExtensions = try writableFileExtensions()
         let extensionUppercased = fileTypeExtension?.uppercased()
         // MP3 isn't in exiftool's own writable list, but ID3Writer covers it separately.

@@ -92,31 +92,55 @@ enum ID3Writer {
 
         for metaTag in editable {
             guard metaTag.group == "ID3v2_3" || metaTag.group == "ID3v2_4" else { continue }
-            guard let frameID = ID3TextFrameNames.frameIDsByTagName[metaTag.name] else { continue }
-            let matchIndices = tag.frames.indices.filter { tag.frames[$0].id == frameID }
-            let index: Int
-            if matchIndices.count == 1 {
-                index = matchIndices[0]
-            } else if matchIndices.isEmpty {
-                throw WriterError.frameNotFound(frameID)
-            } else if frameID == "COMM" {
-                index = try resolveCommentFrame(matchIndices: matchIndices, frames: tag.frames, tagName: metaTag.name)
-            } else {
-                throw WriterError.ambiguousFrame(frameID)
-            }
 
-            let newFrameData: Data
-            if frameID == "COMM" {
-                newFrameData = try rewriteCommentFrame(tag.frames[index], newText: metaTag.value)
+            if let frameID = ID3TextFrameNames.frameIDsByTagName[metaTag.name] {
+                let matchIndices = tag.frames.indices.filter { tag.frames[$0].id == frameID }
+                let index: Int
+                if matchIndices.count == 1 {
+                    index = matchIndices[0]
+                } else if matchIndices.isEmpty {
+                    throw WriterError.frameNotFound(frameID)
+                } else if frameID == "COMM" {
+                    index = try resolveCommentFrame(matchIndices: matchIndices, frames: tag.frames, tagName: metaTag.name)
+                } else {
+                    throw WriterError.ambiguousFrame(frameID)
+                }
+
+                let newFrameData: Data
+                if frameID == "COMM" {
+                    newFrameData = try rewriteCommentFrame(tag.frames[index], newText: metaTag.value)
+                } else {
+                    newFrameData = try rewriteTextFrame(tag.frames[index], newValue: metaTag.value)
+                }
+                tag.frames[index].data = newFrameData
             } else {
-                newFrameData = try rewriteTextFrame(tag.frames[index], newValue: metaTag.value)
+                let (frameID, index) = try resolveUserDefinedFrame(tagName: metaTag.name, frames: tag.frames)
+                let newFrameData = frameID == "WXXX"
+                    ? try rewriteUserURLFrame(tag.frames[index], newValue: metaTag.value)
+                    : try rewriteDescribedTextFrame(tag.frames[index], prefixLength: 0, newValue: metaTag.value)
+                tag.frames[index].data = newFrameData
             }
-            tag.frames[index].data = newFrameData
         }
 
         let newTagBytes = try rebuildTag(tag)
         let audioBytes = originalData.subdata(in: tag.audioOffset..<originalData.count)
         try (newTagBytes + audioBytes).write(to: url)
+    }
+
+    /// The exiftool-style tag names (e.g. "SourceUrl") of TXXX/WXXX frames in `data` whose
+    /// description resolves unambiguously to exactly one frame — i.e. the ones safe to offer
+    /// for editing. Called from `ExifToolBridge.readTags` to flag `MetadataTag.isUserDefinedID3FrameEditable`;
+    /// `write` re-derives the same match independently rather than trusting this set, so this
+    /// is purely advisory for the UI.
+    static func editableUserDefinedFrameNames(data: Data) -> Set<String> {
+        guard let tag = try? parse(data) else { return [] }
+        var counts: [String: Int] = [:]
+        for frame in tag.frames {
+            guard frame.id == "TXXX" || frame.id == "WXXX" else { continue }
+            guard let name = try? userDefinedFrameName(frame) else { continue }
+            counts[name, default: 0] += 1
+        }
+        return Set(counts.filter { $0.value == 1 }.keys)
     }
 
     // MARK: - Parsing
@@ -192,6 +216,25 @@ enum ID3Writer {
         return candidates[0]
     }
 
+    /// Finds the single TXXX (`UserDefinedText`) or WXXX (`UserDefinedURL`) frame whose own
+    /// description field resolves — via `userDefinedFrameName`, the same logic exiftool itself
+    /// uses to name these frames — to `tagName`. Mirrors `editableUserDefinedFrameNames`, which
+    /// is what decided this tag was safe to offer for editing in the first place; re-resolving
+    /// here (rather than trusting a stale index) means a file that changed on disk since it was
+    /// read is still handled safely.
+    private static func resolveUserDefinedFrame(tagName: String, frames: [Frame]) throws -> (frameID: String, index: Int) {
+        var matches: [(frameID: String, index: Int)] = []
+        for (index, frame) in frames.enumerated() {
+            guard frame.id == "TXXX" || frame.id == "WXXX" else { continue }
+            guard let name = try? userDefinedFrameName(frame), name == tagName else { continue }
+            matches.append((frame.id, index))
+        }
+        guard matches.count == 1 else {
+            throw matches.isEmpty ? WriterError.frameNotFound(tagName) : WriterError.ambiguousFrame(tagName)
+        }
+        return matches[0]
+    }
+
     // MARK: - Rewriting
 
     private static func rewriteTextFrame(_ frame: Frame, newValue: String) throws -> Data {
@@ -204,14 +247,21 @@ enum ID3Writer {
     }
 
     private static func rewriteCommentFrame(_ frame: Frame, newText: String) throws -> Data {
-        guard frame.data.count >= 4 else { throw WriterError.invalidFrameData(frame.id) }
+        try rewriteDescribedTextFrame(frame, prefixLength: 3, newValue: newText)
+    }
+
+    /// Shared by COMM (3-byte language prefix before the description) and TXXX (no prefix):
+    /// both frames are [encoding][prefix][description][terminator][value], and only the value
+    /// half ever changes here — the description, and which frame it identifies, stays untouched.
+    private static func rewriteDescribedTextFrame(_ frame: Frame, prefixLength: Int, newValue: String) throws -> Data {
+        guard frame.data.count >= 1 + prefixLength else { throw WriterError.invalidFrameData(frame.id) }
         let originalEncoding = frame.data[0]
-        let lang = frame.data.subdata(in: 1..<4)
-        let rest = frame.data.subdata(in: 4..<frame.data.count)
-        var (desc, _) = try splitDescriptionAndText(rest, encoding: originalEncoding)
+        let prefix = frame.data.subdata(in: 1..<(1 + prefixLength))
+        let rest = frame.data.subdata(in: (1 + prefixLength)..<frame.data.count)
+        var (desc, _) = try splitDescriptionAndText(rest, encoding: originalEncoding, frameID: frame.id)
 
         var encoding = originalEncoding
-        if encoding == 0 && !isLatin1Representable(newText) {
+        if encoding == 0 && !isLatin1Representable(newValue) {
             encoding = 1
             let descString = String(data: desc, encoding: .isoLatin1) ?? ""
             guard let utf16Desc = descString.data(using: .utf16) else { throw WriterError.cannotEncodeText }
@@ -219,14 +269,75 @@ enum ID3Writer {
         }
 
         let term: Data = (encoding == 0 || encoding == 3) ? Data([0]) : Data([0, 0])
-        let textBytes = try encodeText(encoding: encoding, value: newText)
-        return Data([encoding]) + lang + desc + term + textBytes
+        let textBytes = try encodeText(encoding: encoding, value: newValue)
+        return Data([encoding]) + prefix + desc + term + textBytes
     }
 
-    private static func splitDescriptionAndText(_ rest: Data, encoding: UInt8) throws -> (desc: Data, text: Data) {
+    /// Rewrites a WXXX frame's URL, leaving its description untouched. Unlike TXXX/COMM, the
+    /// URL half is always Latin-1 and isn't null-terminated (it just runs to the end of the
+    /// frame), matching how `Tag.parse`/exiftool itself read it.
+    private static func rewriteUserURLFrame(_ frame: Frame, newValue: String) throws -> Data {
+        guard let originalEncoding = frame.data.first else { throw WriterError.invalidFrameData(frame.id) }
+        let rest = frame.data.subdata(in: 1..<frame.data.count)
+        let (desc, _) = try splitDescriptionAndText(rest, encoding: originalEncoding, frameID: frame.id)
+        guard let urlData = newValue.data(using: .isoLatin1) else { throw WriterError.cannotEncodeText }
+        let term: Data = (originalEncoding == 0 || originalEncoding == 3) ? Data([0]) : Data([0, 0])
+        return Data([originalEncoding]) + desc + term + urlData
+    }
+
+    // MARK: - User-defined (TXXX/WXXX) frame naming
+
+    /// The exiftool tag name for a TXXX or WXXX frame, derived from its own description field
+    /// the same way exiftool's ID3 module does (see `Image::ExifTool::ID3::ParseID3v2Frame`):
+    /// an empty description falls back to the frame's generic name ("UserDefinedText"/
+    /// "UserDefinedURL"); otherwise WXXX appends "_URL" to the description unless it already
+    /// contains "url" (case-insensitively), and the result is run through the same
+    /// illegal-character-stripping/capitalization exiftool's `MakeTagName` applies.
+    private static func userDefinedFrameName(_ frame: Frame) throws -> String {
+        guard let encoding = frame.data.first else { throw WriterError.invalidFrameData(frame.id) }
+        let rest = frame.data.subdata(in: 1..<frame.data.count)
+        let (descData, _) = try splitDescriptionAndText(rest, encoding: encoding, frameID: frame.id)
+        guard let description = decodedString(descData, encoding: encoding) else {
+            throw WriterError.invalidFrameData(frame.id)
+        }
+        if frame.id == "WXXX" {
+            guard !description.isEmpty else { return "UserDefinedURL" }
+            let source = description.range(of: "url", options: .caseInsensitive) != nil ? description : description + "_URL"
+            return exifToolTagName(source)
+        } else {
+            guard !description.isEmpty else { return "UserDefinedText" }
+            return exifToolTagName(description)
+        }
+    }
+
+    private static func decodedString(_ data: Data, encoding: UInt8) -> String? {
+        switch encoding {
+        case 0: return String(data: data, encoding: .isoLatin1)
+        case 1: return String(data: data, encoding: .utf16)
+        case 2: return String(data: data, encoding: .utf16BigEndian)
+        case 3: return String(data: data, encoding: .utf8)
+        default: return nil
+        }
+    }
+
+    /// Swift port of exiftool's `Image::ExifTool::MakeTagName`: keep only ASCII letters/digits/
+    /// "-"/"_", capitalize the first character, and prefix "Tag" if that leaves fewer than two
+    /// characters or one starting with "-" or a digit.
+    private static func exifToolTagName(_ raw: String) -> String {
+        var name = String(raw.filter { $0 == "-" || $0 == "_" || ($0.isASCII && $0.isLetter) || ($0.isASCII && $0.isNumber) })
+        if let first = name.first {
+            name.replaceSubrange(name.startIndex..<name.index(after: name.startIndex), with: String(first).uppercased())
+        }
+        if name.count < 2 || name.first == "-" || (name.first?.isASCII == true && name.first?.isNumber == true) {
+            name = "Tag" + name
+        }
+        return name
+    }
+
+    private static func splitDescriptionAndText(_ rest: Data, encoding: UInt8, frameID: String = "COMM") throws -> (desc: Data, text: Data) {
         let bytes = [UInt8](rest)
         if encoding == 0 || encoding == 3 {
-            guard let nullIndex = bytes.firstIndex(of: 0) else { throw WriterError.invalidFrameData("COMM") }
+            guard let nullIndex = bytes.firstIndex(of: 0) else { throw WriterError.invalidFrameData(frameID) }
             return (Data(bytes[0..<nullIndex]), Data(bytes[(nullIndex + 1)...]))
         }
         // UTF-16 (with or without BOM): a real terminator is a double-zero at an even byte
@@ -239,7 +350,7 @@ enum ID3Writer {
             }
             idx += 1
         }
-        throw WriterError.invalidFrameData("COMM")
+        throw WriterError.invalidFrameData(frameID)
     }
 
     private static func rebuildTag(_ tag: Tag) throws -> Data {
