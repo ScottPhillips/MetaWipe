@@ -2,7 +2,7 @@
 
 A native macOS app for viewing, editing, and erasing file metadata — EXIF/IPTC/XMP, GPS location, extended attributes (Finder comments/tags), and filesystem timestamps.
 
-[**Download MetaWipe-1.2.2.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
+[**Download MetaWipe-1.2.3.dmg**](https://github.com/ScottPhillips/MetaWipe/releases/latest)
 
 ![MetaWipe main window showing metadata tags for a file](screenshots/main-view.png)
 
