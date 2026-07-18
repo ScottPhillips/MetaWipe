@@ -27,7 +27,9 @@ struct MetadataTag: Identifiable, Equatable {
         guard !Self.readOnlyGroups.contains(group) else { return false }
         switch group {
         case "ID3v2_3", "ID3v2_4":
-            return ID3TextFrameNames.frameIDsByTagName[name] != nil || isUserDefinedID3FrameEditable
+            return ID3TextFrameNames.frameIDsByTagName[name] != nil
+                || ID3TextFrameNames.urlFrameIDsByTagName[name] != nil
+                || isUserDefinedID3FrameEditable
         case "ID3", "ID3v1", "ID3v1_Enh", "ID3v2_2", "Lyrics3":
             return false
         default:

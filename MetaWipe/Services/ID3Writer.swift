@@ -113,6 +113,12 @@ enum ID3Writer {
                     newFrameData = try rewriteTextFrame(tag.frames[index], newValue: metaTag.value)
                 }
                 tag.frames[index].data = newFrameData
+            } else if let frameID = ID3TextFrameNames.urlFrameIDsByTagName[metaTag.name] {
+                let matchIndices = tag.frames.indices.filter { tag.frames[$0].id == frameID }
+                guard matchIndices.count == 1 else {
+                    throw matchIndices.isEmpty ? WriterError.frameNotFound(frameID) : WriterError.ambiguousFrame(frameID)
+                }
+                tag.frames[matchIndices[0]].data = try rewritePlainURLFrame(newValue: metaTag.value)
             } else {
                 let (frameID, index) = try resolveUserDefinedFrame(tagName: metaTag.name, frames: tag.frames)
                 let newFrameData = frameID == "WXXX"
@@ -283,6 +289,15 @@ enum ID3Writer {
         guard let urlData = newValue.data(using: .isoLatin1) else { throw WriterError.cannotEncodeText }
         let term: Data = (originalEncoding == 0 || originalEncoding == 3) ? Data([0]) : Data([0, 0])
         return Data([originalEncoding]) + desc + term + urlData
+    }
+
+    /// Rewrites a single-purpose URL frame (WCOM/WCOP/WOAF/WOAR/WOAS/WORS/WPAY/WPUB — see
+    /// `ID3TextFrameNames.urlFrameIDsByTagName`). Unlike WXXX, these have no encoding byte and no
+    /// description field: the frame body is just Latin-1 URL bytes running to the end of the
+    /// frame, so the new value fully replaces the old frame data rather than patching a sub-range.
+    private static func rewritePlainURLFrame(newValue: String) throws -> Data {
+        guard let urlData = newValue.data(using: .isoLatin1) else { throw WriterError.cannotEncodeText }
+        return urlData
     }
 
     // MARK: - User-defined (TXXX/WXXX) frame naming

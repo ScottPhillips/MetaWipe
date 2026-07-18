@@ -10,13 +10,11 @@ import Foundation
 /// `ID3Writer.editableUserDefinedFrameNames` and `resolveUserDefinedFrame`), only offering one
 /// for editing when its description is unambiguous.
 ///
-/// Deliberately excludes: plain URL frames like WCOM/WOAF (no encoding byte — a different,
-/// simpler structure we don't handle), frames with a PrintConv exiftool can't reliably reverse
-/// if we write the displayed string back literally (date frames
-/// TYER/TDAT/TIME/TORY/TRDA/TDEN/TDOR/TDRC/TDRL/TDTG, TCMP's Yes/No, TLEN's millisecond
-/// conversion), and structured/binary frames (APIC, GEOB, MCDI, OWNE, PCNT, POPM, PRIV, SYLT,
-/// USER, USLT). Comment (COMM) is included despite its extra language/description fields —
-/// `ID3Writer` special-cases those.
+/// Deliberately excludes: frames with a PrintConv exiftool can't reliably reverse if we write the
+/// displayed string back literally (date frames TYER/TDAT/TIME/TORY/TRDA/TDEN/TDOR/TDRC/TDRL/
+/// TDTG, TCMP's Yes/No, TLEN's millisecond conversion), and structured/binary frames (APIC, GEOB,
+/// MCDI, OWNE, PCNT, POPM, PRIV, SYLT, USER, USLT). Comment (COMM) is included despite its extra
+/// language/description fields — `ID3Writer` special-cases those.
 enum ID3TextFrameNames {
     static let frameIDsByTagName: [String: String] = [
         "Title": "TIT2",
@@ -49,5 +47,20 @@ enum ID3TextFrameNames {
         "InternetRadioStationOwner": "TRSO",
         "OriginalFileName": "TOFN",
         "Comment": "COMM",
+    ]
+
+    /// Single-purpose URL frames: `[url bytes, Latin-1, runs to end of frame]` with no encoding
+    /// byte and no description field — a simpler structure than WXXX (user-defined URL, handled
+    /// separately, see above) or the text frames in `frameIDsByTagName`. `ID3Writer` rewrites
+    /// these via `rewritePlainURLFrame` rather than `rewriteTextFrame`/`rewriteUserURLFrame`.
+    static let urlFrameIDsByTagName: [String: String] = [
+        "CommercialURL": "WCOM",
+        "CopyrightURL": "WCOP",
+        "FileURL": "WOAF",
+        "ArtistURL": "WOAR",
+        "SourceURL": "WOAS",
+        "InternetRadioStationURL": "WORS",
+        "PaymentURL": "WPAY",
+        "PublisherURL": "WPUB",
     ]
 }
