@@ -40,14 +40,9 @@ perl MetaWipe/Resources/ExifTool/exiftool -G1 -a -u -s Fixtures/ID3v2/<file>.mp3
 on-disk structure as WOAS/WOAF/WCOM (no encoding byte, URL runs to end of
 frame), just a different frame ID and exiftool tag name.
 
-## Known gap surfaced by these fixtures
-
-`comm_multilang.mp3`/`comm_multilang_v24.mp3` demonstrate a real edge case:
-exiftool names the `eng` comment bare `Comment` (no `-eng` suffix) when
-multiple `COMM` frames with different languages exist, but
-`ID3Writer.resolveCommentFrame` only disambiguates multiple `COMM` matches
-via a `Comment-<lang>` prefix. A file with `eng` + any other language
-therefore can't have its `eng` comment edited through this app — the app
-throws `ambiguousFrame` for the bare `Comment` tag name instead of matching
-it to the `eng` frame. Filed as a follow-up issue rather than fixed here to
-keep this change scoped to #8/#9.
+`comm_multilang.mp3`/`comm_multilang_v24.mp3` cover the bare-`Comment`
+disambiguation case (issue #10): exiftool names the `eng` comment bare
+`Comment` (no `-eng` suffix) when multiple `COMM` frames with different
+languages exist, and `ID3Writer.resolveCommentFrame` matches that bare name
+against whichever `COMM` frame's language is `eng`, mirroring exiftool's own
+naming rule.
