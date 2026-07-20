@@ -210,8 +210,15 @@ enum ID3Writer {
 
     private static func resolveCommentFrame(matchIndices: [Int], frames: [Frame], tagName: String) throws -> Int {
         let prefix = "Comment-"
-        guard tagName.hasPrefix(prefix) else { throw WriterError.ambiguousFrame("COMM") }
-        let langCode = tagName.dropFirst(prefix.count).lowercased()
+        let langCode: String
+        if tagName == "Comment" {
+            // exiftool leaves the `eng` comment unsuffixed; only other languages get `Comment-<lang>`.
+            langCode = "eng"
+        } else if tagName.hasPrefix(prefix) {
+            langCode = tagName.dropFirst(prefix.count).lowercased()
+        } else {
+            throw WriterError.ambiguousFrame("COMM")
+        }
         let candidates = matchIndices.filter { index in
             let raw = frames[index].data
             guard raw.count >= 4 else { return false }
