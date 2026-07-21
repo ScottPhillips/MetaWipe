@@ -29,6 +29,7 @@ struct MetadataTag: Identifiable, Equatable {
         case "ID3v2_3", "ID3v2_4":
             return ID3TextFrameNames.frameIDsByTagName[name] != nil
                 || ID3TextFrameNames.urlFrameIDsByTagName[name] != nil
+                || name.hasPrefix("Comment-")
                 || isUserDefinedID3FrameEditable
         case "ID3", "ID3v1", "ID3v1_Enh", "ID3v2_2", "Lyrics3":
             return false
