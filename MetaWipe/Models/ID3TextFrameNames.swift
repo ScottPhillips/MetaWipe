@@ -14,7 +14,9 @@ import Foundation
 /// displayed string back literally (date frames TYER/TDAT/TIME/TORY/TRDA/TDEN/TDOR/TDRC/TDRL/
 /// TDTG, TCMP's Yes/No, TLEN's millisecond conversion), and structured/binary frames (APIC, GEOB,
 /// MCDI, OWNE, PCNT, POPM, PRIV, SYLT, USER, USLT). Comment (COMM) is included despite its extra
-/// language/description fields — `ID3Writer` special-cases those.
+/// language/description fields — `ID3Writer` special-cases those. Only the bare "Comment" (eng)
+/// key lives here; language-suffixed tags ("Comment-fra", etc.) are dynamic per file, so
+/// `MetadataTag.isEditable` and `ID3Writer.write` match those by prefix instead of a static entry.
 enum ID3TextFrameNames {
     static let frameIDsByTagName: [String: String] = [
         "Title": "TIT2",

@@ -93,7 +93,8 @@ enum ID3Writer {
         for metaTag in editable {
             guard metaTag.group == "ID3v2_3" || metaTag.group == "ID3v2_4" else { continue }
 
-            if let frameID = ID3TextFrameNames.frameIDsByTagName[metaTag.name] {
+            if let frameID = ID3TextFrameNames.frameIDsByTagName[metaTag.name]
+                ?? (metaTag.name.hasPrefix("Comment-") ? "COMM" : nil) {
                 let matchIndices = tag.frames.indices.filter { tag.frames[$0].id == frameID }
                 let index: Int
                 if matchIndices.count == 1 {
